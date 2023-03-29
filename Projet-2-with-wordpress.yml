@@ -1,0 +1,718 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation Sample Template VPC_with_PublicIPs_And_DNS: Sample template
+  that creates a VPC with DNS and public IPs enabled. Note that you are billed
+  for the AWS resources that you use when you create a stack from this template.
+# tttttttttttttttttttttttttttt
+# Database Parameter
+# Parameters:
+#   DBName: 
+#     NoEcho: true
+#     Description: The database name
+#     Type: String
+#     MinLength: 1
+#     MaxLength: 20
+#     AllowedPattern: ^[a-zA-Z0-9]*$
+#   DBUser: 
+#     NoEcho: true
+#     Description: The database admin account username
+#     Type: String
+#     MinLength: 1
+#     MaxLength: 41
+#     AllowedPattern: ^[a-zA-Z0-9]*$
+#   DBMasterpassword:
+#     NoEcho: true
+#     Description: The database password
+#     Type: String
+#     MinLength: 1
+#     MaxLength: 41
+#     AllowedPattern: ^[a-zA-Z0-9]*$
+#   LatestAmazonLinuxAmiId:
+#     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+#     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  # VpcId:
+  #   Type: 'AWS::EC2::VPC::Id'
+  #   Description: VpcId of your existing Virtual Private Cloud (VPC)
+  #   ConstraintDescription: must be the VPC Id of an existing Virtual Private Cloud.
+  # Subnets:
+  #   Type: 'List<AWS::EC2::Subnet::Id>'
+  #   Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
+  #   ConstraintDescription: >-
+  #     must be a list of at least two existing subnets associated with at least
+  #     two different availability zones. They should be residing in the selected
+  #     Virtual Private Cloud.
+# sssssssssssssssssssssssssssssss
+Resources:
+# VPC
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      # DependsOn: !Ref NATGateway # forcing depencing
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      CidrBlock: 10.0.0.0/16
+      Tags:
+      - Key: Name
+        Value: project2-vpc
+# PublicSubnet
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/18
+      AvailabilityZone: "us-west-1c"
+      Tags:
+      - Key: Name
+        Value: Public-1
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.64.0/18
+      AvailabilityZone: "us-west-1b"
+      Tags:
+      - Key: Name
+        Value: Public-2
+  
+# InternetGateway
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  VPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  # Public RouteTable
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PublicRouteTable
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable 
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable 
+# PublicNACL
+  NetworkAclPublic:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: WordPress-Stack
+  SubnetNetworkAclAssociationPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      NetworkAclId: !Ref NetworkAclPublic
+  NetworkAclEntryInPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 100
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+# Private Subnet
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.128.0/19
+      AvailabilityZone: "us-west-1c"
+      Tags:
+      - Key: Name
+        Value: Private-1
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.160.0/19
+      AvailabilityZone: "us-west-1b"
+      Tags:
+      - Key: Name
+        Value: Private-2
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.192.0/19
+      AvailabilityZone: "us-west-1c"
+      Tags:
+      - Key: Name
+        Value:  Private-3
+  PrivateSubnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.224.0/19
+      AvailabilityZone: "us-west-1b"
+      Tags:
+      - Key: Name
+        Value:  Private-4
+# PrivateRouteTable
+  PrivateSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: PrivateRouteTable
+  PrivateRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+# Public IP      
+  NatPublicIP:
+    Type: 'AWS::EC2::EIP'
+    DependsOn: VPC
+    Properties:
+      Domain: vpc
+# Natgatway
+  NatGateway: # natgateway creation
+    Type: 'AWS::EC2::NatGateway'
+    DependsOn: NatPublicIP
+    Properties:
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+  PrivateSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+  PrivateSubnet3RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable 
+  PrivateSubnet4RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
+      RouteTableId: !Ref PrivateRouteTable
+# PrivateNetworkAcl
+  PrivateNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+        VpcId: !Ref VPC      
+  InboundRule1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+       NetworkAclId:
+         Ref: PrivateNetworkAcl
+       RuleNumber: 100
+       Protocol: -1
+       RuleAction: allow
+       CidrBlock: 0.0.0.0/0
+  OutboundRule1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+       NetworkAclId:
+         Ref: PrivateNetworkAcl
+       RuleNumber: 100
+       Protocol: -1
+       Egress: true
+       RuleAction: allow
+       CidrBlock: 0.0.0.0/0
+  PrivateSubnet1NetworkAclAssociation:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      NetworkAclId: !Ref PrivateNetworkAcl
+  PrivateSubnet2NetworkAclAssociation:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      NetworkAclId: !Ref PrivateNetworkAcl
+  PrivateSubnet3NetworkAclAssociation:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      NetworkAclId: !Ref PrivateNetworkAcl
+  PrivateSubnet4NetworkAclAssociation:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
+      NetworkAclId: !Ref PrivateNetworkAcl
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTP ingress
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+# Outputs:
+#   VPCId:
+#     Description: VPC ID
+#     Value: !Ref VPC
+#     Export:
+#       Name: !Sub '${AWS::StackName}-VPCID'
+#   PublicSubnet1:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PublicSubnet1
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Pub1SubnetID' #replacing a string
+#   PublicSubnet2:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PublicSubnet2
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Pub2SubnetID' #replacing a string
+#   PrivateSubnet1:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PrivateSubnet1
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Priv1SubnetID' #replacing a string
+#   PrivateSubnet2:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PrivateSubnet2
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Priv2SubnetID' #replacing a string
+#   PrivateSubnet3:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PrivateSubnet3
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Priv3SubnetID' #replacing a string
+#   PrivateSubnet4:
+#     Description: The subnet ID to use for public web servers
+#     Value: !Ref PrivateSubnet4
+#     Export:
+#       Name: !Sub '${AWS::StackName}-Priv4SubnetID' #replacing a string
+#   WebServerSecurityGroup:
+#     Description: The security group ID to use for public web servers
+#     Value: !GetAtt 
+#       - WebServerSecurityGroup
+#       - GroupId
+#     Export:
+#       Name: !Sub '${AWS::StackName}-SecurityGroupID'
+
+
+# EC2 instance with Wordpress
+
+  # LinuxEc2Instance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     InstanceType: t2.micro
+  #     ImageId: ami-060d3509162bcc386
+  #     NetworkInterfaces:
+  #       - AssociatePublicIpAddress: 'true'
+  #         DeviceIndex: '0'
+  #         GroupSet:
+  #           - Ref: 'WebServerSecurityGroup'
+  #         SubnetId:
+  #           Ref: 'PublicSubnet1'
+  #     UserData:
+  #       !Base64 |
+  #       #!/bin/bash
+  #       sudo yum update -y
+  #       sudo amazon-linux-extras install -y php7.4 
+  #       sudo yum install -y httpd
+  #       sudo systemctl start httpd
+  #       sudo systemctl enable httpd
+  #       sudo systemctl is-enabled httpd
+  #       sudo usermod -a -G apache ec2-user
+  #       groups ec2-user
+  #       sudo chown -R ec2-user:apache /var/www
+  #       sudo chmod 2775 /var/www && find /var/www -type d -exec sudo chmod 2775 {} \;
+  #       find /var/www -type f -exec sudo chmod 0664 {} \;
+  #       cd /var/www/html/
+  #       wget https://wordpress.org/latest.tar.gz
+  #       tar -xzf latest.tar.gz
+  #       mv  -v wordpress/* /var/www/html/
+  #       sudo chown -R apache:apache /var/www/html
+  #     Tags:
+  #       - Key: Name
+  #         Value: WordPress-EC2
+# databaseeeeeeeeeeeeeeeeeee
+#   DBSubnetGroup:
+#     Type: "AWS::RDS::DBSubnetGroup"
+#     Properties:
+#       DBSubnetGroupDescription: "Subnet Group"
+#       DBSubnetGroupName: DBSubnetGroup
+#       SubnetIds:
+#         - !Ref PrivateSubnet1
+#         - !Ref PrivateSubnet2
+#   DBEC2SecurityGroup:
+#     Type: AWS::EC2::SecurityGroup
+#     Properties:
+#       GroupDescription: Open database for access
+#       SecurityGroupIngress:
+#         - IpProtocol: tcp
+#           FromPort: 3306
+#           ToPort: 3306
+#           SourceSecurityGroupId: !GetAtt WebServerSecurityGroup.GroupId
+#       Tags:
+#         - Key: Name
+#           Value: WordPress-DB
+#       VpcId: !Ref VPC  
+# # DB instance
+#   DBInstance:
+#     Type: AWS::RDS::DBInstance
+#     Properties:
+#       DBName: !Ref DBName
+#       Engine: MySQL
+#       DBInstanceClass: db.t2.micro
+#       BackupRetentionPeriod: 0
+#       AllocatedStorage: 20
+#       MultiAZ: True
+#       MasterUsername: !Ref DBUser
+#       MasterUserPassword: !Ref DBMasterpassword
+#       DBSubnetGroupName: !Ref DBSubnetGroup
+#       VPCSecurityGroups: 
+#         - !GetAtt "DBEC2SecurityGroup.GroupId"
+  # MyHostedZone:
+  #   Type: "AWS::Route53::HostedZone"
+  #   Properties:
+  #     Name: rosaria.com
+
+  # myDNSRecord:
+  #   Type: 'AWS::Route53::RecordSet'
+  #   Properties:
+  #     HostedZoneId: !Ref MyHostedZone
+  #     Name: "mysite.controle.com"
+  #     Type: SPF
+  #     TTL: '900'
+  #     ResourceRecords:
+  #     - !Ref LinuxEc2Instance
+  # myDNSRecord2:
+  #   Type: AWS::Route53::RecordSet
+  #   Properties:
+  #     HostedZoneId: Z07873403JAK72YGVA9NE
+  #     Name: mysite.cheetahrosaria.com
+  #     Type: A
+  #     TTL: '900'
+  #     ResourceRecords:
+  #     - !GetAtt LinuxEc2Instance.PublicIp
+  # Outputs:
+  #   LinuxEc2Instance:
+  #     Description: Server Public IP
+  #     Value: !GetAtt LinuxEc2Instance.PublicIp
+  #     Export:
+  #       Name: !Sub "${AWS::StackName}-PublicIp"    
+  # aaappplliicccaaattttiiiiooonnlloooaadddbbbaaalannnncccccerrr!!!!!!!!!!!!!!!!!!!!!!!      
+  ALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+        GroupDescription: "security group for ALB"
+        GroupName: "test-ALB-SG"
+        Tags: 
+          - 
+            Key: "Project"
+            Value: "test-blog"
+          - 
+            Key: "createdBy"
+            Value: "Maureen Barasa"
+          - 
+            Key: "Environment"
+            Value: "test"
+          - 
+            Key: "Name"
+            Value: "test-ALB-SG"
+        VpcId: !Ref VPC
+        SecurityGroupIngress: 
+          - 
+            CidrIp: "0.0.0.0/0"
+            FromPort: 80
+            IpProtocol: "tcp"
+            ToPort: 80
+          - 
+            CidrIp: "0.0.0.0/0"
+            FromPort: 443
+            IpProtocol: "tcp"
+            ToPort: 443
+  Test2TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+        HealthCheckIntervalSeconds: 30
+        HealthCheckPath: "/"
+        Port: 80
+        Protocol: "HTTP"
+        HealthCheckPort: "traffic-port"
+        HealthCheckProtocol: "HTTP"
+        HealthCheckTimeoutSeconds: 5
+        UnhealthyThresholdCount: 2
+        TargetType: "instance"
+        Matcher: 
+            HttpCode: "200"
+        HealthyThresholdCount: 5
+        VpcId: !Ref VPC
+        Name: "ELB-TARGET"
+        HealthCheckEnabled: true
+        TargetGroupAttributes: 
+          - 
+            Key: "stickiness.enabled"
+            Value: "false"
+          - 
+            Key: "deregistration_delay.timeout_seconds"
+            Value: "300"
+          - 
+            Key: "stickiness.type"
+            Value: "lb_cookie"
+          - 
+            Key: "stickiness.lb_cookie.duration_seconds"
+            Value: "86400"
+          - 
+            Key: "slow_start.duration_seconds"
+            Value: "0"
+          - 
+            Key: "load_balancing.algorithm.type"
+            Value: "round_robin"
+        # Targets:
+        #   - Id:
+        #       Ref: LinuxEc2Instance
+            # Port: 80
+  ApplicationLoadBalancer:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+        Name: "test-Application-Load-Balancer"
+        Scheme: "internet-facing"
+        Type: "application"
+        Subnets: 
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+        SecurityGroups: 
+          - !Ref ALBSecurityGroup
+        IpAddressType: "ipv4"
+        LoadBalancerAttributes: 
+          - 
+            Key: "access_logs.s3.enabled"
+            Value: "false"
+          - 
+            Key: "idle_timeout.timeout_seconds"
+            Value: "60"
+          - 
+            Key: "deletion_protection.enabled"
+            Value: "false"
+          - 
+            Key: "routing.http2.enabled"
+            Value: "true"
+          - 
+            Key: "routing.http.drop_invalid_header_fields.enabled"
+            Value: "false"
+#####
+  # HTTPSListener:
+  #   Type: "AWS::ElasticLoadBalancingV2::Listener"
+  #   Properties:
+  #       LoadBalancerArn: !Ref ApplicationLoadBalancer
+  #       Port: 443
+  #       Protocol: "HTTPS"
+  #       SslPolicy: "ELBSecurityPolicy-2016-08"
+  #       Certificates: 
+  #         - CertificateArn: arn:aws:acm:us-west-1:249990965851:certificate/4b80f809-3e88-4399-b74f-59cdaf1d028f
+                
+  #       DefaultActions: 
+  #         - Order: 1
+  #           TargetGroupArn: !Ref Test2TargetGroup
+  #           Type: "forward"
+  # HTTPListener:
+  #   Type: "AWS::ElasticLoadBalancingV2::Listener"
+  #   Properties:
+  #       LoadBalancerArn: !Ref ApplicationLoadBalancer
+  #       Port: 80
+  #       Protocol: "HTTP"
+  #       DefaultActions: 
+  #         - Order: 1
+  #           RedirectConfig: 
+  #               Protocol: "HTTPS"
+  #               Port: "443"
+  #               Host: "#{host}"
+  #               Path: "/#{path}"
+  #               Query: "#{query}"
+  #               StatusCode: "HTTP_301"
+            # Type: "redirect"
+            # TargetGroupArn: !Ref Test2TargetGroup
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: Test2TargetGroup
+      LoadBalancerArn:
+          Ref: ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  # CLOUDFONT
+  # CloudFrontOriginAccessIdentity:
+  #   Type: "AWS::CloudFront::CloudFrontOriginAccessIdentity"
+  #   Properties:
+  #     CloudFrontOriginAccessIdentityConfig:
+  #       Comment: !Ref TheBucket
+  # # Configure CloudFront
+  # CloudFrontDistribution:
+  #   Type: "AWS::CloudFront::Distribution"
+  #   Properties:
+  #     DistributionConfig:
+  #       Aliases:
+  #         - !Ref DomainName
+  #       CustomErrorResponses:
+  #         - ErrorCode: 403 # not found
+  #           ResponseCode: 404
+  #           ResponsePagePath: /404.html
+  #       DefaultCacheBehavior:
+  #         AllowedMethods:
+  #           - GET
+  #           - HEAD
+  #           - OPTIONS
+  #         CachedMethods:
+  #           - GET
+  #           - HEAD
+  #           - OPTIONS
+  #         Compress: true
+  #         DefaultTTL: 3600 # in seconds
+  #         ForwardedValues:
+  #           Cookies:
+  #             Forward: none
+  #           QueryString: false
+  #         MaxTTL: 86400 # in seconds
+  #         MinTTL: 60 # in seconds
+  #         TargetOriginId: the-S3-bucket
+  #         ViewerProtocolPolicy: "allow-all"
+  #       # This DefaultRootObject configuration is not enough.
+  #       DefaultRootObject: "/index.html"
+  #       Enabled: true
+  #       HttpVersion: http2
+  #       Origins:
+  #         - DomainName:  
+  #             !Join ["", [ !Ref TheBucket, ".s3-website-us-west-1.amazonaws.com"]]
+  #           Id: the-S3-bucket
+  #           S3OriginConfig: 
+  #             OriginAccessIdentity: 
+  #               !Join [ "", [ "origin-access-identity/cloudfront/", !Ref CloudFrontOriginAccessIdentity]]
+  #       PriceClass: "PriceClass_All"
+  #       ViewerCertificate:
+  #         AcmCertificateArn: arn:aws:acm:us-east-1:069498327304:certificate/28f327b8-3fed-44ab-bb66-ebdcb1971605
+  #         MinimumProtocolVersion: TLSv1
+  #         SslSupportMethod: sni-only 
+# Route53hostedzonnnnnne.................................................
+  MyHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: cheetahrosaria.com
+      HostedZoneConfig:
+        Comment: My hosted zone
+  GeoRoutingPolicy:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      Comment: Geolocation routing policy for mydomain
+      HostedZoneId: Z07873403JAK72YGVA9NE
+      RecordSets:
+      - AliasTarget:
+          DNSName: !GetAtt 'ApplicationLoadBalancer.DNSName'
+          HostedZoneId: !GetAtt 'ApplicationLoadBalancer.CanonicalHostedZoneID'
+        SetIdentifier: Frontend Two
+        Name: cheetahrosaria.com
+        Type: A
+        GeoLocation:
+          CountryCode: US
+      - AliasTarget:
+          DNSName: s3-website-us-east-1.amazonaws.com
+          HostedZoneId: Z3AQBSTGFYJSTF
+        SetIdentifier: Frontend One
+        Name: cheetahrosaria.com
+        Type: A
+        GeoLocation:
+          CountryCode: '*'
+
+
+
+
+###create autoscaling#################################################
+  MyLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: Wk7LaunchTemplate
+      LaunchTemplateData:
+        ImageId: ami-0036b4598ccd42565
+        InstanceType: t2.micro
+        SecurityGroups: 
+        - !Ref WebServerSecurityGroup
+        UserData: 
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            sudo yum update -y
+            sudo amazon-linux-extras install -y php7.4 
+            sudo yum install -y httpd
+            sudo systemctl start httpd
+            sudo systemctl enable httpd
+            sudo systemctl is-enabled httpd
+            sudo usermod -a -G apache ec2-user
+            groups ec2-user
+            sudo chown -R ec2-user:apache /var/www
+            sudo chmod 2775 /var/www && find /var/www -type d -exec sudo chmod 2775 {} \;
+            find /var/www -type f -exec sudo chmod 0664 {} \;
+            cd /var/www/html/
+            wget https://wordpress.org/latest.tar.gz
+            tar -xzf latest.tar.gz
+            mv  -v wordpress/* /var/www/html/
+            sudo chown -R apache:apache /var/www/html
+  # MyASG:
+  #   Type: AWS::AutoScaling::AutoScalingGroup
+  #   Properties:
+  #     LaunchTemplate:
+  #       LaunchTemplateId: !Ref MyLaunchTemplate
+  #       Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+  #     MinSize: 1
+  #     MaxSize: 3
+  #     DesiredCapacity: 1
+  #     AvailabilityZones: 
+  #     - us-west-1c
+  #     - us-west-1b
+  #     MetricsCollection:
+  #     - Granularity: 1Minute
+  #     TargetGroupARNs:
+  #     - !Ref Test2TargetGroup
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '1'
+      MaxSize: '3'
+      DesiredCapacity: '1'
+      AvailabilityZones: 
+      - us-west-1c
+      - us-west-1b
+      LaunchTemplate:
+        LaunchTemplateId: !Ref MyLaunchTemplate
+        Version: !GetAtt MyLaunchTemplate.LatestVersionNumber
+      # VPCZoneIdentifier: !Ref Subnets
+      TargetGroupARNs:
+        - !Ref Test2TargetGroup
